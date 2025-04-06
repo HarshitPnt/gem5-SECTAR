@@ -27,7 +27,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 #ifndef __MEM_RUBY_NETWORK_GARNET_0_ROUTINGUNIT_HH__
 #define __MEM_RUBY_NETWORK_GARNET_0_ROUTINGUNIT_HH__
 
@@ -40,65 +39,69 @@
 namespace gem5
 {
 
-namespace ruby
-{
+  namespace ruby
+  {
 
-namespace garnet
-{
+    namespace garnet
+    {
 
-class InputUnit;
-class Router;
+      class InputUnit;
+      class Router;
 
-class RoutingUnit
-{
-  public:
-    RoutingUnit(Router *router);
-    int outportCompute(RouteInfo route,
-                      int inport,
-                      PortDirection inport_dirn);
+      class RoutingUnit
+      {
+      public:
+        RoutingUnit(Router *router);
+        int outportCompute(RouteInfo route,
+                           int inport,
+                           PortDirection inport_dirn);
 
-    // Topology-agnostic Routing Table based routing (default)
-    void addRoute(std::vector<NetDest>& routing_table_entry);
-    void addWeight(int link_weight);
+        // Topology-agnostic Routing Table based routing (default)
+        void addRoute(std::vector<NetDest> &routing_table_entry);
+        void addWeight(int link_weight);
 
-    // get output port from routing table
-    int  lookupRoutingTable(int vnet, NetDest net_dest);
+        // get output port from routing table
+        int lookupRoutingTable(int vnet, NetDest net_dest);
 
-    // Topology-specific direction based routing
-    void addInDirection(PortDirection inport_dirn, int inport);
-    void addOutDirection(PortDirection outport_dirn, int outport);
+        // Topology-specific direction based routing
+        void addInDirection(PortDirection inport_dirn, int inport);
+        void addOutDirection(PortDirection outport_dirn, int outport);
 
-    // Routing for Mesh
-    int outportComputeXY(RouteInfo route,
-                         int inport,
-                         PortDirection inport_dirn);
-
-    // Custom Routing Algorithm using Port Directions
-    int outportComputeCustom(RouteInfo route,
+        // Routing for Mesh
+        int outportComputeXY(RouteInfo route,
                              int inport,
                              PortDirection inport_dirn);
 
-    // Returns true if vnet is present in the vector
-    // of vnets or if the vector supports all vnets.
-    bool supportsVnet(int vnet, std::vector<int> sVnets);
+        // Custom Routing Algorithm using Port Directions
+        int outportComputeCustom(RouteInfo route,
+                                 int inport,
+                                 PortDirection inport_dirn);
 
+        // Routing algorithm for SECTAR
+        int outportComputeSectar(RouteInfo route,
+                                 int inport,
+                                 PortDirection inport_dirn);
 
-  private:
-    Router *m_router;
+        // Returns true if vnet is present in the vector
+        // of vnets or if the vector supports all vnets.
+        bool supportsVnet(int vnet, std::vector<int> sVnets);
 
-    // Routing Table
-    std::vector<std::vector<NetDest>> m_routing_table;
-    std::vector<int> m_weight_table;
+      private:
+        Router *m_router;
 
-    // Inport and Outport direction to idx maps
-    std::map<PortDirection, int> m_inports_dirn2idx;
-    std::map<int, PortDirection> m_inports_idx2dirn;
-    std::map<int, PortDirection> m_outports_idx2dirn;
-    std::map<PortDirection, int> m_outports_dirn2idx;
-};
+        // Routing Table
+        std::vector<std::vector<NetDest>> m_routing_table;
+        std::vector<int> m_weight_table;
 
-} // namespace garnet
-} // namespace ruby
+        // Inport and Outport direction to idx maps
+        std::map<PortDirection, int> m_inports_dirn2idx;
+        std::map<int, PortDirection> m_inports_idx2dirn;
+        std::map<int, PortDirection> m_outports_idx2dirn;
+        std::map<PortDirection, int> m_outports_dirn2idx;
+      };
+
+    } // namespace garnet
+  } // namespace ruby
 } // namespace gem5
 
 #endif // __MEM_RUBY_NETWORK_GARNET_0_ROUTINGUNIT_HH__

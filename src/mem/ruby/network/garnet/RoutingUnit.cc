@@ -209,6 +209,8 @@ namespace gem5
                     outport =
                         outportComputeCustom(route, inport, inport_dirn);
                     break;
+                case SECTAR_:
+
                 default:
                     outport =
                         lookupRoutingTable(route.vnet, route.net_dest);
@@ -293,6 +295,15 @@ namespace gem5
             // using port directions. (Example adaptive)
             int
             RoutingUnit::outportComputeCustom(RouteInfo route,
+                                              int inport,
+                                              PortDirection inport_dirn)
+            {
+                panic("%s placeholder executed", __FUNCTION__);
+            }
+
+            // Routing algorithm for SECTAR
+            int
+            RoutingUnit::outportComputeSectar(RouteInfo route,
                                               int inport,
                                               PortDirection inport_dirn)
             {
