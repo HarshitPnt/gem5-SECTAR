@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 #ifndef __MEM_RUBY_NETWORK_GARNET_0_ROUTER_HH__
 #define __MEM_RUBY_NETWORK_GARNET_0_ROUTER_HH__
 
@@ -72,46 +71,99 @@ class Router : public BasicRouter, public Consumer
     ~Router() = default;
 
     void wakeup();
-    void print(std::ostream& out) const {};
+    void print(std::ostream &out) const {};
 
     void init();
     void addInPort(PortDirection inport_dirn, NetworkLink *link,
                    CreditLink *credit_link);
     void addOutPort(PortDirection outport_dirn, NetworkLink *link,
-                    std::vector<NetDest>& routing_table_entry,
-                    int link_weight, CreditLink *credit_link,
-                    uint32_t consumerVcs);
+                    std::vector<NetDest> &routing_table_entry, int link_weight,
+                    CreditLink *credit_link, uint32_t consumerVcs);
 
-    Cycles get_pipe_stages(){ return m_latency; }
-    uint32_t get_num_vcs()       { return m_num_vcs; }
-    uint32_t get_num_vnets()     { return m_virtual_networks; }
-    uint32_t get_vc_per_vnet()   { return m_vc_per_vnet; }
-    int get_num_inports()   { return m_input_unit.size(); }
-    int get_num_outports()  { return m_output_unit.size(); }
-    int get_id()            { return m_id; }
+    Cycles get_pipe_stages()
+    {
+        return m_latency;
+    }
+    uint32_t get_num_vcs()
+    {
+        return m_num_vcs;
+    }
+    uint32_t get_num_vnets()
+    {
+        return m_virtual_networks;
+    }
+    uint32_t get_vc_per_vnet()
+    {
+        return m_vc_per_vnet;
+    }
+    int get_num_inports()
+    {
+        return m_input_unit.size();
+    }
+    int get_num_outports()
+    {
+        return m_output_unit.size();
+    }
+    int get_id()
+    {
+        return m_id;
+    }
+    // getter setter for alert flag
+    uint8_t get_alert_flag()
+    {
+        return m_alert_flag;
+    }
+    void set_alert_flag(uint8_t alert_flag)
+    {
+        m_alert_flag = alert_flag;
+    }
 
-    void init_net_ptr(GarnetNetwork* net_ptr)
+    // getter setter for trojan
+    bool is_trojan()
+    {
+        return m_is_trojan;
+    }
+    void set_trojan(bool is_trojan)
+    {
+        m_is_trojan = is_trojan;
+    }
+
+    // getter setter for alert direction
+    PortDirection get_alert_dirn()
+    {
+        return m_alert_dirn;
+    }
+    void set_alert_dirn(PortDirection alert_dirn)
+    {
+        m_alert_dirn = alert_dirn;
+    }
+
+    void init_net_ptr(GarnetNetwork *net_ptr)
     {
         m_network_ptr = net_ptr;
     }
 
-    GarnetNetwork* get_net_ptr()                    { return m_network_ptr; }
+    GarnetNetwork *get_net_ptr()
+    {
+        return m_network_ptr;
+    }
 
-    InputUnit*
-    getInputUnit(unsigned port)
+    InputUnit *getInputUnit(unsigned port)
     {
         assert(port < m_input_unit.size());
         return m_input_unit[port].get();
     }
 
-    OutputUnit*
-    getOutputUnit(unsigned port)
+    OutputUnit *getOutputUnit(unsigned port)
     {
         assert(port < m_output_unit.size());
         return m_output_unit[port].get();
     }
 
-    int getBitWidth() { return m_bit_width; }
+    int getBitWidth()
+    {
+        return m_bit_width;
+    }
 
     PortDirection getOutportDirection(int outport);
     PortDirection getInportDirection(int inport);
@@ -121,20 +173,22 @@ class Router : public BasicRouter, public Consumer
     void schedule_wakeup(Cycles time);
 
     std::string getPortDirectionName(PortDirection direction);
-    void printFaultVector(std::ostream& out);
-    void printAggregateFaultProbability(std::ostream& out);
+    void printFaultVector(std::ostream &out);
+    void printAggregateFaultProbability(std::ostream &out);
 
     void regStats();
     void collateStats();
     void resetStats();
 
     // For Fault Model:
-    bool get_fault_vector(int temperature, float fault_vector[]) {
+    bool get_fault_vector(int temperature, float fault_vector[])
+    {
         return m_network_ptr->fault_model->fault_vector(m_id, temperature,
                                                         fault_vector);
     }
     bool get_aggregate_fault_probability(int temperature,
-                                         float *aggregate_fault_prob) {
+                                         float *aggregate_fault_prob)
+    {
         return m_network_ptr->fault_model->fault_prob(m_id, temperature,
                                                       aggregate_fault_prob);
     }
@@ -146,7 +200,15 @@ class Router : public BasicRouter, public Consumer
     uint32_t m_virtual_networks, m_vc_per_vnet, m_num_vcs;
     uint32_t m_bit_width;
     GarnetNetwork *m_network_ptr;
+    // alert flag for SECTAR
+    // 0: no neighboring trojan
+    // 1: neighboring trojan
+    // 2: indirectly connected trojan
+    uint8_t m_alert_flag;
+    PortDirection m_alert_dirn;
 
+    // Model for trojan
+    bool m_is_trojan;
     RoutingUnit routingUnit;
     SwitchAllocator switchAllocator;
     CrossbarSwitch crossbarSwitch;

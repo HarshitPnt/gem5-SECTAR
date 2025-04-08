@@ -86,6 +86,11 @@ namespace gem5
         // of vnets or if the vector supports all vnets.
         bool supportsVnet(int vnet, std::vector<int> sVnets);
 
+        // Returns true if incoming flit is deflected
+        bool isFlitDeflected(RouteInfo route,
+                             int inport,
+                             PortDirection inport_dirn);
+
       private:
         Router *m_router;
 
