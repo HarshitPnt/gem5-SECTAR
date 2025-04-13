@@ -45,6 +45,8 @@ namespace ruby
 namespace garnet
 {
 
+#define HT 27
+
 RoutingUnit::RoutingUnit(Router *router)
 {
     m_router = router;
@@ -345,34 +347,40 @@ int RoutingUnit::outportComputeSectar(RouteInfo route, int inport,
     int x_diff = dest_x - my_x;
     int y_diff = dest_y - my_y;
 
-    std::cout << "Router id: " << m_router->get_id() << " Current x: " << my_x
-              << " Destination x: " << dest_x << "Current y: " << my_y
-              << " Destination y: " << dest_y << " inport direction "
-              << inport_dirn << std::endl;
+    // std::cout << "Router id: " << m_router->get_id() << " Current x: " <<
+    // my_x
+    //           << " Destination x: " << dest_x << "Current y: " << my_y
+    //           << " Destination y: " << dest_y << " inport direction "
+    //           << inport_dirn << std::endl;
     uint8_t alert_flag = m_router->get_alert_flag();
 
     if (alert_flag == 1)
     {
-        std::cout << "Router " << m_router->get_id()
-                  << " is connected to a trojan at " << num_cols * 3 + 3
-                  << std::endl;
+        // std::cout << "Router " << m_router->get_id()
+        //           << " is connected to a trojan at " << num_cols * 3 + 3
+        //           << std::endl;
         // directly connected to a trojan
         PortDirection alert_dirn = m_router->get_alert_dirn();
-        std::cout << "Alert direction: " << alert_dirn << " Inport direction "
-                  << inport_dirn << std::endl;
+        // std::cout << "Alert direction: " << alert_dirn << " Inport direction
+        // "
+        //           << inport_dirn << std::endl;
         if (x_diff != 0)
         {
             if (x_diff > 0)
             {
                 if (alert_dirn == "East")
                 {
-                    if (y_diff <= 0)
+                    if (dest_id - 1 == my_id)
                     {
-                        outport_dirn = "North";
+                        outport_dirn = "East";
+                    }
+                    else if (y_diff <= 0)
+                    {
+                        outport_dirn = "South";
                     }
                     else
                     {
-                        outport_dirn = "South";
+                        outport_dirn = "North";
                     }
                 }
                 else
@@ -382,13 +390,17 @@ int RoutingUnit::outportComputeSectar(RouteInfo route, int inport,
             {
                 if (alert_dirn == "West")
                 {
-                    if (y_diff <= 0)
+                    if (dest_id + 1 == my_id)
                     {
-                        outport_dirn = "North";
+                        outport_dirn = "West";
+                    }
+                    else if (y_diff <= 0)
+                    {
+                        outport_dirn = "South";
                     }
                     else
                     {
-                        outport_dirn = "South";
+                        outport_dirn = "North";
                     }
                 }
                 else
@@ -399,25 +411,13 @@ int RoutingUnit::outportComputeSectar(RouteInfo route, int inport,
         {
             if (y_diff > 0)
             {
-                if (alert_dirn == "South")
-                {
-                    if (x_diff <= 0)
-                    {
-                        outport_dirn = "West";
-                    }
-                    else
-                    {
-                        outport_dirn = "East";
-                    }
-                }
-                else
-                    outport_dirn = "South";
-            }
-            else
-            {
                 if (alert_dirn == "North")
                 {
-                    if (x_diff <= 0)
+                    if (dest_id - num_cols == my_id)
+                    {
+                        outport_dirn = "North";
+                    }
+                    else if (x_diff <= 0)
                     {
                         outport_dirn = "West";
                     }
@@ -429,6 +429,26 @@ int RoutingUnit::outportComputeSectar(RouteInfo route, int inport,
                 else
                     outport_dirn = "North";
             }
+            else
+            {
+                if (alert_dirn == "South")
+                {
+                    if (dest_id + num_cols == my_id)
+                    {
+                        outport_dirn = "South";
+                    }
+                    else if (x_diff <= 0)
+                    {
+                        outport_dirn = "West";
+                    }
+                    else
+                    {
+                        outport_dirn = "East";
+                    }
+                }
+                else
+                    outport_dirn = "South";
+            }
         }
         else
         {
@@ -439,30 +459,30 @@ int RoutingUnit::outportComputeSectar(RouteInfo route, int inport,
     {
         // indirectly connected to a trojan
         // or no trojan
-        std::cout << "Router " << m_router->get_id()
-                  << " is a propagation router\n"
-                  << std::endl;
+        // std::cout << "Router " << m_router->get_id()
+        //           << " is a propagation router\n"
+        //   << std::endl;
         // std::cout << "Alert direction: " << m_router->get_alert_dirn() <<
         // std::endl;
         if ((x_diff < 0 && (inport_dirn == "West")) ||
             (x_diff > 0 && (inport_dirn == "East")))
         {
             if (y_diff < 0)
-                outport_dirn = "South";
-            else
                 outport_dirn = "North";
+            else
+                outport_dirn = "South";
         }
         else if (x_diff < 0 && (inport_dirn != "West"))
             outport_dirn = "West";
         else if (x_diff > 0 && (inport_dirn != "East"))
             outport_dirn = "East";
         else if (y_diff < 0)
-            outport_dirn = "North";
-        else if (y_diff > 0)
             outport_dirn = "South";
+        else if (y_diff > 0)
+            outport_dirn = "North";
         else
         {
-            std::cout << x_diff << y_diff << std::endl;
+            // std::cout << x_diff << y_diff << std::endl;
             panic("x_hops == y_hops == 0");
         }
         // else if (x_diff < 0 && (inport_dirn == "South" || inport_dirn ==
@@ -515,7 +535,7 @@ int RoutingUnit::outportComputeSectar(RouteInfo route, int inport,
             panic("x_hops == y_hops == 0");
         }
     }
-    std::cout << "Outport direction: " << outport_dirn << std::endl;
+    // std::cout << "Outport direction: " << outport_dirn << std::endl;
     return m_outports_dirn2idx[outport_dirn];
 }
 
