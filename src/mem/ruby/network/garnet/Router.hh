@@ -129,13 +129,13 @@ class Router : public BasicRouter, public Consumer
     }
 
     // getter setter for alert direction
-    PortDirection get_alert_dirn()
+    std::vector<PortDirection> get_alert_dirn()
     {
         return m_alert_dirn;
     }
     void set_alert_dirn(PortDirection alert_dirn)
     {
-        m_alert_dirn = alert_dirn;
+        m_alert_dirn.push_back(alert_dirn);
     }
 
     void init_net_ptr(GarnetNetwork *net_ptr)
@@ -168,7 +168,8 @@ class Router : public BasicRouter, public Consumer
     PortDirection getOutportDirection(int outport);
     PortDirection getInportDirection(int inport);
 
-    int route_compute(RouteInfo route, int inport, PortDirection direction);
+    int route_compute(RouteInfo route, int inport, PortDirection direction,
+                      int id);
     void grant_switch(int inport, flit *t_flit);
     void schedule_wakeup(Cycles time);
 
@@ -205,7 +206,7 @@ class Router : public BasicRouter, public Consumer
     // 1: neighboring trojan
     // 2: indirectly connected trojan
     uint8_t m_alert_flag;
-    PortDirection m_alert_dirn;
+    std::vector<PortDirection> m_alert_dirn;
 
     // Model for trojan
     bool m_is_trojan;

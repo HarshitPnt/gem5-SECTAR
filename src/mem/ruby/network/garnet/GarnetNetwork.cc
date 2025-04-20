@@ -60,6 +60,17 @@ namespace garnet
  * (see configs/network/Network.py)
  */
 
+int _router_id_to_index(int router_id, int num_cols, int num_rows)
+{
+    // 0 starts from last row
+    int row = num_rows - router_id / num_cols - 1;
+    int col = router_id % num_cols;
+    // std::cout << "Router ID: " << router_id << " Row: " << row
+    //           << " Col: " << col << " index " << row * num_cols + col
+    //           << std::endl;
+    return row * num_cols + col;
+}
+
 GarnetNetwork::GarnetNetwork(const Params &p) : Network(p)
 {
     m_num_rows = p.num_rows;
@@ -69,6 +80,17 @@ GarnetNetwork::GarnetNetwork(const Params &p) : Network(p)
     m_buffers_per_ctrl_vc = p.buffers_per_ctrl_vc;
     m_routing_algorithm = p.routing_algorithm;
     m_num_cols = p.routers.size() / m_num_rows;
+    m_trojan_router_id = p.trojan_router_id;
+    // extract the trojan router ids from the list of ids as string
+    // m_trojan_router_ids and convert to int
+    std::vector<int> trojan_router_ids;
+    std::istringstream iss(p.trojan_router_id);
+    std::string id;
+    while (std::getline(iss, id, ' '))
+    {
+        trojan_router_ids.push_back(std::stoi(id));
+        std::cout << "Trojan Router ID: " << id << std::endl;
+    }
 
     m_enable_fault_model = p.enable_fault_model;
     if (m_enable_fault_model)
@@ -83,8 +105,7 @@ GarnetNetwork::GarnetNetwork(const Params &p) : Network(p)
         else
             m_vnet_type[i] = CTRL_VNET_; // carries only ctrl packets
     }
-    int row = 0;
-    int col = 0;
+
     // record the routers
     for (std::vector<BasicRouter *>::const_iterator i = p.routers.begin();
          i != p.routers.end(); ++i)
@@ -94,41 +115,140 @@ GarnetNetwork::GarnetNetwork(const Params &p) : Network(p)
 
         // initialize the router's network pointers
         router->init_net_ptr(this);
-
-        // set alert flags considering trojan to be in 4th row and 4th column
-        row = router->get_id() / m_num_cols;
-        col = router->get_id() % m_num_cols;
-        if (row == 3 && (col == 2 || col == 4))
+        if (std::find(trojan_router_ids.begin(), trojan_router_ids.end(),
+                      router->get_id()) != trojan_router_ids.end())
         {
-            router->set_alert_flag(1);
-            if (col == 2)
-                router->set_alert_dirn("East");
-            else
-                router->set_alert_dirn("West");
-            std::cout
-                << "Router " << router->get_id()
-                << " is connected to a trojan in the East/West direction\n"
-                << std::endl;
-        }
-        else if (col == 3 && (row == 2 || row == 4))
-        {
-            router->set_alert_flag(1);
-            if (row == 2)
-                router->set_alert_dirn("South");
-            else
-                router->set_alert_dirn("North");
-            std::cout
-                << "Router " << router->get_id()
-                << " is connected to a trojan in the South/North direction\n"
-                << std::endl;
-        }
-        else if ((row == 2 && (col == 2 || col == 4)) ||
-                 (row == 4 && (col == 2 || col == 4)))
-        {
-            router->set_alert_flag(2);
-            std::cout << "Router " << router->get_id()
-                      << " is a propagation router\n"
+            router->set_trojan(true);
+            std::cout << "Router " << router->get_id() << " is a trojan\n"
                       << std::endl;
+        }
+        else
+        {
+            router->set_trojan(false);
+        }
+        std::cout << "Router ID: " << router->get_id() << std::endl;
+    }
+
+    // set alert flags for propagation routers
+    if (trojan_router_ids.size() > 0)
+    {
+        for (std::vector<int>::const_iterator i = trojan_router_ids.begin();
+             i != trojan_router_ids.end(); ++i)
+        {
+            int trojan_router_id = *i;
+            int trojan_index =
+                _router_id_to_index(trojan_router_id, m_num_cols, m_num_rows);
+            if (trojan_index / m_num_cols >= 1 &&
+                trojan_index % m_num_cols >= 1)
+            {
+                // int index = _router_id_to_index(
+                //     trojan_router_id + m_num_cols - 1, m_num_cols,
+                //     m_num_rows);
+                int index = trojan_router_id + m_num_cols - 1;
+                m_routers[index]->set_alert_flag(2);
+                std::cout << "Router " << m_routers[index]->get_id()
+                          << " is a propagation router\n"
+                          << std::endl;
+            }
+            if (trojan_index / m_num_cols >= 1 &&
+                trojan_index % m_num_cols <= m_num_cols - 2)
+            {
+                // int index = _router_id_to_index(
+                //     trojan_router_id + m_num_cols + 1, m_num_cols,
+                //     m_num_rows);
+                int index = trojan_router_id + m_num_cols + 1;
+                m_routers[index]->set_alert_flag(2);
+                std::cout << "Router " << m_routers[index]->get_id()
+                          << " is a propagation router\n"
+                          << std::endl;
+            }
+            if (trojan_index / m_num_cols <= m_num_rows - 2 &&
+                trojan_index % m_num_cols >= 1)
+            {
+                // int index = _router_id_to_index(
+                //     trojan_router_id - m_num_cols - 1, m_num_cols,
+                //     m_num_rows);
+                int index = trojan_router_id - m_num_cols - 1;
+                m_routers[index]->set_alert_flag(2);
+                std::cout << "Router " << m_routers[index]->get_id()
+                          << " is a propagation router\n"
+                          << std::endl;
+            }
+            if (trojan_index / m_num_cols <= m_num_rows - 2 &&
+                trojan_index % m_num_cols <= m_num_cols - 2)
+            {
+                // int index = _router_id_to_index(
+                //     trojan_router_id - m_num_cols + 1, m_num_cols,
+                //     m_num_rows);
+                int index = trojan_router_id - m_num_cols + 1;
+                m_routers[index]->set_alert_flag(2);
+                std::cout << "Router " << m_routers[index]->get_id()
+                          << " is a propagation router\n"
+                          << std::endl;
+            }
+        }
+
+        // set alert flags for routers connected to a trojan
+        if (trojan_router_ids.size() > 0)
+        {
+            for (std::vector<int>::const_iterator i =
+                     trojan_router_ids.begin();
+                 i != trojan_router_ids.end(); ++i)
+            {
+                int trojan_router_id = *i;
+                int trojan_index = _router_id_to_index(trojan_router_id,
+                                                       m_num_cols, m_num_rows);
+                if (trojan_index % m_num_cols != 0)
+                {
+                    // int index = _router_id_to_index(trojan_router_id - 1,
+                    //                                 m_num_cols, m_num_rows);
+                    int index = trojan_router_id - 1;
+                    m_routers[index]->set_alert_flag(1);
+                    m_routers[index]->set_alert_dirn("East");
+                    std::cout
+                        << "Router " << m_routers[index]->get_id()
+                        << " is connected to a trojan in the East direction\n"
+                        << std::endl;
+                }
+                if (trojan_index % m_num_cols != m_num_cols - 1)
+                {
+                    // int index = _router_id_to_index(trojan_router_id + 1,
+                    //                                 m_num_cols, m_num_rows);
+                    int index = trojan_router_id + 1;
+                    m_routers[index]->set_alert_flag(1);
+                    m_routers[index]->set_alert_dirn("West");
+                    std::cout
+                        << "Router " << m_routers[index]->get_id()
+                        << " is connected to a trojan in the West direction\n"
+                        << std::endl;
+                }
+                if (trojan_index / m_num_cols != m_num_cols - 1)
+                {
+                    // int index = _router_id_to_index(
+                    //     trojan_router_id - m_num_cols, m_num_cols,
+                    //     m_num_rows);
+                    int index = trojan_router_id - m_num_cols;
+                    m_routers[index]->set_alert_flag(1);
+                    m_routers[index]->set_alert_dirn("North");
+                    std::cout
+                        << "Router " << m_routers[index]->get_id()
+                        << " is connected to a trojan in the North direction\n"
+                        << std::endl;
+                }
+                if (trojan_index / m_num_cols != 0)
+                {
+                    // int index = _router_id_to_index(
+                    //     trojan_router_id + m_num_cols, m_num_cols,
+                    //     m_num_rows);
+                    int index = trojan_router_id + m_num_cols;
+                    m_routers[index]->set_alert_flag(1);
+                    m_routers[index]->set_alert_dirn("South");
+                    std::cout
+                        << "Router " << m_routers[index]->get_id()
+                        << " is connected to a trojan in the South direction\n"
+                        << std::endl;
+                }
+            }
         }
     }
 

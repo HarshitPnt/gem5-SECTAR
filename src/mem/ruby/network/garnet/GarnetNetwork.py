@@ -41,7 +41,7 @@ class GarnetNetwork(RubyNetwork):
 
     num_rows = Param.Int(0, "number of rows if 2D (mesh/torus/..) topology");
     # Remove
-    compromised_router_id = Param.Int(0, "ID of compromised router");
+    trojan_router_id = Param.String("", "ID of compromised router");
     ni_flit_size = Param.UInt32(16, "network interface flit size in bytes")
     vcs_per_vnet = Param.UInt32(4, "virtual channels per virtual network");
     buffers_per_data_vc = Param.UInt32(4, "buffers per data virtual channel");

@@ -159,9 +159,9 @@ PortDirection Router::getInportDirection(int inport)
 }
 
 int Router::route_compute(RouteInfo route, int inport,
-                          PortDirection inport_dirn)
+                          PortDirection inport_dirn, int id)
 {
-    return routingUnit.outportCompute(route, inport, inport_dirn);
+    return routingUnit.outportCompute(route, inport, inport_dirn, id);
 }
 
 void Router::grant_switch(int inport, flit *t_flit)

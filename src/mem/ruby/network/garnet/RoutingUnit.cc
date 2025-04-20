@@ -36,6 +36,8 @@
 #include "mem/ruby/network/garnet/Router.hh"
 #include "mem/ruby/slicc_interface/Message.hh"
 
+#define HT_PROBABILITY 10
+
 namespace gem5
 {
 
@@ -44,8 +46,6 @@ namespace ruby
 
 namespace garnet
 {
-
-#define HT 27
 
 RoutingUnit::RoutingUnit(Router *router)
 {
@@ -196,7 +196,7 @@ bool RoutingUnit::isFlitDeflected(RouteInfo route, int inport,
 }
 
 int RoutingUnit::outportCompute(RouteInfo route, int inport,
-                                PortDirection inport_dirn)
+                                PortDirection inport_dirn, int id)
 {
     int outport = -1;
 
@@ -207,6 +207,8 @@ int RoutingUnit::outportCompute(RouteInfo route, int inport,
         // all with output port direction = "Local"
         // Get exact outport id from table
         outport = lookupRoutingTable(route.vnet, route.net_dest);
+        std::cout << "Ejecting to local outport at router "
+                  << m_router->get_id() << std::endl;
         return outport;
     }
 
@@ -236,9 +238,12 @@ int RoutingUnit::outportCompute(RouteInfo route, int inport,
         //     // do something
         //     ;
         // }
-        outport = outportComputeSectar(route, inport, inport_dirn);
+        outport = outportComputeSectar(route, inport, inport_dirn, id);
         break;
     default:
+    case HT_:
+        outport = outportComputeHT(route, inport, inport_dirn);
+        break;
         outport = lookupRoutingTable(route.vnet, route.net_dest);
         break;
     }
@@ -311,7 +316,10 @@ int RoutingUnit::outportComputeXY(RouteInfo route, int inport,
         // already checked that in outportCompute() function
         panic("x_hops == y_hops == 0");
     }
-
+    std::cout << "Router id: " << m_router->get_id() << " Current x: " << my_x
+              << " Destination x: " << dest_x << " Current y: " << my_y
+              << " Destination y: " << dest_y << " inport direction "
+              << inport_dirn << std::endl;
     return m_outports_dirn2idx[outport_dirn];
 }
 
@@ -323,9 +331,64 @@ int RoutingUnit::outportComputeCustom(RouteInfo route, int inport,
     panic("%s placeholder executed", __FUNCTION__);
 }
 
+bool _connected_to_trojan(std::vector<PortDirection> alert_dirns,
+                          PortDirection alert_dirn)
+{
+    if (std::find(alert_dirns.begin(), alert_dirns.end(), alert_dirn) !=
+        alert_dirns.end())
+        return true;
+    return false;
+}
+
+PortDirection _random_non_trojan_dirn(std::vector<PortDirection> alert_dirns,
+                                      int row, int rows, int col, int cols)
+{
+    std::vector<PortDirection> directions = {"North", "South", "East", "West"};
+    std::vector<PortDirection> non_trojan_dirns;
+    for (auto dirn : directions)
+    {
+        if (std::find(alert_dirns.begin(), alert_dirns.end(), dirn) ==
+            alert_dirns.end())
+        {
+            if (row == rows - 1 && dirn == "North")
+                continue;
+            if (row == 0 && dirn == "South")
+                continue;
+            if (col == 0 && dirn == "West")
+                continue;
+            if (col == cols - 1 && dirn == "East")
+                continue;
+            non_trojan_dirns.push_back(dirn);
+        }
+    }
+    for (auto dirn : non_trojan_dirns)
+    {
+        std::cout << dirn << " ";
+    }
+    std::cout << std::endl;
+    if (non_trojan_dirns.size() == 0)
+        return "Local";
+    int random_index = rand() % non_trojan_dirns.size();
+    return non_trojan_dirns[random_index];
+}
+
+PortDirection _opposite_dirn(PortDirection dirn)
+{
+    if (dirn == "North")
+        return "South";
+    else if (dirn == "South")
+        return "North";
+    else if (dirn == "East")
+        return "West";
+    else if (dirn == "West")
+        return "East";
+    else
+        return "Local";
+}
+
 // Routing algorithm for SECTAR
 int RoutingUnit::outportComputeSectar(RouteInfo route, int inport,
-                                      PortDirection inport_dirn)
+                                      PortDirection inport_dirn, int id)
 {
     // panic("%s placeholder executed", __FUNCTION__);
     PortDirection outport_dirn = "Unknown";
@@ -341,46 +404,82 @@ int RoutingUnit::outportComputeSectar(RouteInfo route, int inport,
     int dest_x = dest_id % num_cols;
     int dest_y = dest_id / num_cols;
 
-    int x_hops = abs(dest_x - my_x);
-    int y_hops = abs(dest_y - my_y);
-
     int x_diff = dest_x - my_x;
     int y_diff = dest_y - my_y;
-
-    // std::cout << "Router id: " << m_router->get_id() << " Current x: " <<
-    // my_x
-    //           << " Destination x: " << dest_x << "Current y: " << my_y
-    //           << " Destination y: " << dest_y << " inport direction "
-    //           << inport_dirn << std::endl;
+    PortDirection outport_dirn_trojan = "Unknown";
     uint8_t alert_flag = m_router->get_alert_flag();
-
-    if (alert_flag == 1)
+    int routing_flag = 0;
+    std::vector<PortDirection> available_directions;
+    bool trojan_dest = false;
+    if (m_router->is_trojan())
+    {
+        // randomly get any output port direction
+        std::vector<PortDirection> directions = {"North", "South", "East",
+                                                 "West"};
+        // get only directions that are spatially valid
+        for (auto dir : directions)
+        {
+            if (dir == "North" && my_y == num_rows - 1)
+                continue;
+            if (dir == "South" && my_y == 0)
+                continue;
+            if (dir == "West" && my_x == 0)
+                continue;
+            if (dir == "East" && my_x == num_cols - 1)
+                continue;
+            available_directions.push_back(dir);
+        }
+        // choose a direction randomly
+        int random_index = rand() % available_directions.size();
+        outport_dirn_trojan = available_directions[random_index];
+    }
+    if (alert_flag == 1 && !m_router->is_trojan())
     {
         // std::cout << "Router " << m_router->get_id()
         //           << " is connected to a trojan at " << num_cols * 3 + 3
         //           << std::endl;
         // directly connected to a trojan
-        PortDirection alert_dirn = m_router->get_alert_dirn();
-        // std::cout << "Alert direction: " << alert_dirn << " Inport direction
+        std::vector<PortDirection> alert_dirn = m_router->get_alert_dirn();
+        // std::cout << "Alert direction: " << alert_dirn << " Inport
+        // direction
         // "
         //           << inport_dirn << std::endl;
         if (x_diff != 0)
         {
             if (x_diff > 0)
             {
-                if (alert_dirn == "East")
+                if (_connected_to_trojan(alert_dirn, "East"))
                 {
-                    if (dest_id - 1 == my_id)
+                    if (dest_x - 1 == my_x && dest_y == my_y)
                     {
                         outport_dirn = "East";
+                        trojan_dest = true;
                     }
                     else if (y_diff <= 0)
                     {
                         outport_dirn = "South";
+                        outport_dirn =
+                            y_diff == 0 && inport_dirn == outport_dirn
+                                ? "North"
+                                : outport_dirn;
                     }
                     else
                     {
                         outport_dirn = "North";
+                    }
+                    if (!trojan_dest)
+                    {
+
+                        outport_dirn =
+                            std::find(alert_dirn.begin(), alert_dirn.end(),
+                                      outport_dirn) != alert_dirn.end()
+                                ? inport_dirn
+                                : outport_dirn;
+                        outport_dirn = outport_dirn == "Local"
+                                           ? _random_non_trojan_dirn(
+                                                 alert_dirn, my_y, num_rows,
+                                                 my_x, num_cols)
+                                           : outport_dirn;
                     }
                 }
                 else
@@ -388,19 +487,39 @@ int RoutingUnit::outportComputeSectar(RouteInfo route, int inport,
             }
             else
             {
-                if (alert_dirn == "West")
+                if (_connected_to_trojan(alert_dirn, "West"))
                 {
-                    if (dest_id + 1 == my_id)
+                    if (dest_y == my_y && dest_x + 1 == my_x)
                     {
                         outport_dirn = "West";
+                        trojan_dest = true;
                     }
                     else if (y_diff <= 0)
                     {
                         outport_dirn = "South";
+                        outport_dirn =
+                            (y_diff == 0 && inport_dirn == outport_dirn) ||
+                                    (my_y == 0)
+                                ? "North"
+                                : outport_dirn;
                     }
                     else
                     {
                         outport_dirn = "North";
+                    }
+                    if (!trojan_dest)
+                    {
+
+                        outport_dirn =
+                            std::find(alert_dirn.begin(), alert_dirn.end(),
+                                      outport_dirn) != alert_dirn.end()
+                                ? inport_dirn
+                                : outport_dirn;
+                        outport_dirn = outport_dirn == "Local"
+                                           ? _random_non_trojan_dirn(
+                                                 alert_dirn, my_y, num_rows,
+                                                 my_x, num_cols)
+                                           : outport_dirn;
                     }
                 }
                 else
@@ -411,19 +530,38 @@ int RoutingUnit::outportComputeSectar(RouteInfo route, int inport,
         {
             if (y_diff > 0)
             {
-                if (alert_dirn == "North")
+                if (_connected_to_trojan(alert_dirn, "North"))
                 {
-                    if (dest_id - num_cols == my_id)
+                    if (dest_x == my_x && dest_y - 1 == my_y)
                     {
                         outport_dirn = "North";
+                        trojan_dest = true;
                     }
                     else if (x_diff <= 0)
                     {
                         outport_dirn = "West";
+                        outport_dirn =
+                            x_diff == 0 && inport_dirn == outport_dirn
+                                ? "East"
+                                : outport_dirn;
                     }
                     else
                     {
                         outport_dirn = "East";
+                    }
+                    if (!trojan_dest)
+                    {
+
+                        outport_dirn =
+                            std::find(alert_dirn.begin(), alert_dirn.end(),
+                                      outport_dirn) != alert_dirn.end()
+                                ? inport_dirn
+                                : outport_dirn;
+                        outport_dirn = outport_dirn == "Local"
+                                           ? _random_non_trojan_dirn(
+                                                 alert_dirn, my_y, num_rows,
+                                                 my_x, num_cols)
+                                           : outport_dirn;
                     }
                 }
                 else
@@ -431,19 +569,39 @@ int RoutingUnit::outportComputeSectar(RouteInfo route, int inport,
             }
             else
             {
-                if (alert_dirn == "South")
+                if (_connected_to_trojan(alert_dirn, "South"))
                 {
-                    if (dest_id + num_cols == my_id)
+                    if (dest_x == my_x && dest_y + 1 == my_y)
                     {
                         outport_dirn = "South";
+                        trojan_dest = true;
                     }
                     else if (x_diff <= 0)
                     {
                         outport_dirn = "West";
+                        outport_dirn =
+                            (x_diff == 0 && inport_dirn == outport_dirn) ||
+                                    (my_x == 0)
+                                ? "East"
+                                : outport_dirn;
                     }
                     else
                     {
                         outport_dirn = "East";
+                    }
+                    if (!trojan_dest)
+                    {
+
+                        outport_dirn =
+                            std::find(alert_dirn.begin(), alert_dirn.end(),
+                                      outport_dirn) != alert_dirn.end()
+                                ? inport_dirn
+                                : outport_dirn;
+                        outport_dirn = outport_dirn == "Local"
+                                           ? _random_non_trojan_dirn(
+                                                 alert_dirn, my_y, num_rows,
+                                                 my_x, num_cols)
+                                           : outport_dirn;
                     }
                 }
                 else
@@ -454,23 +612,24 @@ int RoutingUnit::outportComputeSectar(RouteInfo route, int inport,
         {
             panic("x_hops == y_hops == 0");
         }
+        routing_flag = 1;
     }
-    else if (alert_flag == 2)
+    else if (alert_flag == 2 && !m_router->is_trojan())
     {
         // indirectly connected to a trojan
         // or no trojan
         // std::cout << "Router " << m_router->get_id()
         //           << " is a propagation router\n"
         //   << std::endl;
-        // std::cout << "Alert direction: " << m_router->get_alert_dirn() <<
-        // std::endl;
+        // std::cout << "Alert direction: " << m_router->get_alert_dirn()
+        // << std::endl;
         if ((x_diff < 0 && (inport_dirn == "West")) ||
             (x_diff > 0 && (inport_dirn == "East")))
         {
             if (y_diff < 0)
-                outport_dirn = "North";
-            else
                 outport_dirn = "South";
+            else
+                outport_dirn = "North";
         }
         else if (x_diff < 0 && (inport_dirn != "West"))
             outport_dirn = "West";
@@ -491,8 +650,9 @@ int RoutingUnit::outportComputeSectar(RouteInfo route, int inport,
         // else if (x_diff > 0 && (inport_dirn == "North" || inport_dirn ==
         // "Local" || inport_dirn == "West"))
         //     outport_dirn = "East";
+        routing_flag = 1;
     }
-    else if (alert_flag == 0)
+    else if (alert_flag == 0 || m_router->is_trojan())
     {
         int x_hops = abs(dest_x - my_x);
         int y_hops = abs(dest_y - my_y);
@@ -535,7 +695,146 @@ int RoutingUnit::outportComputeSectar(RouteInfo route, int inport,
             panic("x_hops == y_hops == 0");
         }
     }
+
     // std::cout << "Outport direction: " << outport_dirn << std::endl;
+    if (outport_dirn_trojan != "Unknown")
+    {
+        // with 10% probability choose the trojan direction
+        // else choose the normal direction
+        int random_index = rand() % HT_PROBABILITY;
+        if (random_index == 0)
+        {
+            outport_dirn = outport_dirn_trojan;
+            routing_flag = 2;
+        }
+    }
+    if (routing_flag == 0)
+    {
+        // std::cout << "XY Routing " << "Received packet at router "
+        //           << m_router->get_id() << " with flit id " << id
+        //           << " with dest id " << dest_id << " and inport direction "
+        //           << inport_dirn << " sending to router " << outport_dirn
+        //           << std::endl;
+        ;
+    }
+    else if (routing_flag == 1)
+    {
+        // std::cout << "SECTAR Routing " << "Received packet at router "
+        //           << m_router->get_id() << " with flit id " << id
+        //           << " with dest id " << dest_id << " and inport direction "
+        //           << inport_dirn << " sending to router " << outport_dirn
+        //           << std::endl;
+        ;
+    }
+    else if (routing_flag == 2)
+    {
+        // std::cout << "Trojan Routing " << "Received packet at router "
+        //           << m_router->get_id() << " with flit id " << id
+        //           << " with dest id " << dest_id << " and inport direction "
+        //           << inport_dirn << " sending to router " << outport_dirn
+        //           << std::endl;
+        // for (auto dirn : available_directions)
+        // {
+        //     std::cout << dirn << " ";
+        // }
+        // std::cout << std::endl;
+        ;
+    }
+    if (inport_dirn == "Local")
+    {
+        std::cout << "Destination router " << dest_id << std::endl;
+    }
+
+    return m_outports_dirn2idx[outport_dirn];
+}
+
+int RoutingUnit::outportComputeHT(RouteInfo route, int inport,
+                                  PortDirection inport_dirn)
+{
+    PortDirection outport_dirn = "Unknown";
+    PortDirection outport_dirn_trojan = "Unknown";
+
+    [[maybe_unused]] int num_rows = m_router->get_net_ptr()->getNumRows();
+    int num_cols = m_router->get_net_ptr()->getNumCols();
+    assert(num_rows > 0 && num_cols > 0);
+
+    int my_id = m_router->get_id();
+    int my_x = my_id % num_cols;
+    int my_y = my_id / num_cols;
+
+    int dest_id = route.dest_router;
+    int dest_x = dest_id % num_cols;
+    int dest_y = dest_id / num_cols;
+
+    int x_hops = abs(dest_x - my_x);
+    int y_hops = abs(dest_y - my_y);
+
+    bool x_dirn = (dest_x >= my_x);
+    bool y_dirn = (dest_y >= my_y);
+
+    // already checked that in outportCompute() function
+    assert(!(x_hops == 0 && y_hops == 0));
+
+    if (x_hops > 0)
+    {
+        if (x_dirn)
+        {
+            outport_dirn = "East";
+        }
+        else
+        {
+            outport_dirn = "West";
+        }
+    }
+    else if (y_hops > 0)
+    {
+        if (y_dirn)
+        {
+            // "Local" or "South" or "West" or "East"
+            outport_dirn = "North";
+        }
+        else
+        {
+            // "Local" or "North" or "West" or "East"
+            outport_dirn = "South";
+        }
+    }
+    else
+    {
+        // x_hops == 0 and y_hops == 0
+        // this is not possible
+        // already checked that in outportCompute() function
+        panic("x_hops == y_hops == 0");
+    }
+    std::vector<PortDirection> directions = {"North", "South", "East", "West"};
+    std::vector<PortDirection> available_directions;
+    // get only directions that are spatially valid
+    for (auto dir : directions)
+    {
+        if (dir == "North" && my_y == num_rows - 1)
+            continue;
+        if (dir == "South" && my_y == 0)
+            continue;
+        if (dir == "West" && my_x == 0)
+            continue;
+        if (dir == "East" && my_x == num_cols - 1)
+            continue;
+        available_directions.push_back(dir);
+    }
+    // choose a direction randomly
+    int random_index = rand() % available_directions.size();
+    outport_dirn_trojan = available_directions[random_index];
+    if (outport_dirn_trojan != "Unknown")
+    {
+        // with 10% probability choose the trojan direction
+        // else choose the normal direction
+        int random_index = rand() % HT_PROBABILITY;
+        if (random_index == 0)
+        {
+            outport_dirn = outport_dirn_trojan;
+        }
+    }
+
     return m_outports_dirn2idx[outport_dirn];
 }
 

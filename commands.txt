@@ -1,0 +1,3 @@
+build/X86/gem5.fast configs/example/garnet_synth_traffic.py --network=garnet --num-cpus=16 --num-dir=16 --topology=Mesh_XY --mesh-rows=4 --sim-cycles=100000000 --injectionrate=0.16 --garnet-deadlock-threshold=50000 --routing-algorithm=3 --synthetic=tornado --trojan-router-id="9" --single-sender-id=4 --single-dest-id=7 --num-packets-max=1
+
+build/X86/gem5.fast configs/example/garnet_synth_traffic.py --network=garnet --num-cpus=16 --num-dir=16 --topology=Mesh_XY --mesh-rows=4 --sim-cycles=100000000 --injectionrate=0.16 --garnet-deadlock-threshold=50000 --routing-algorithm=3 --synthetic=tornado --trojan-router-id="0 6" --single-sender-id=7 --single-dest-id=8 --num-packets-max=1
